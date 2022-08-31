@@ -1,0 +1,371 @@
+---
+title: "Using Directed Acyclic Graphs (DAGs) to describe and understand causal relations"
+author: "Jesse Brunner"
+date: "`r Sys.Date()`"
+output: beamer_presentation
+classoption: aspectratio=1610
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+library(dagitty)
+library(rethinking)
+library(tidyverse)
+library(GGally)
+```
+
+## A Froggy Example
+ You hypothesize size of amphibians at metamorphosis increases with size of vernal  ponds. 
+ 
+ You have measured:
+ 
+-  The snout-vent-length, or **SVL**, of metamorphosing frogs
+-  **Area** of the ponds
+-  **Nutr**ient concentrations entering the ponds (say, all sources of nitrogen, for simplicity)
+-  The growth of algal biomass as **Algae**
+-  **Density** of tadpoles in the pond
+ 
+
+## The data, in all its glory
+
+```{r, fig.height=6}
+Area <- rnorm(100)
+Nutr <- rnorm(100)
+Algae <- rnorm(100, mean = 0.4*Nutr + 0.8*Area)
+Density <- rnorm(100, mean = 0.3*Algae + 0.2*Area)
+SVL <- rnorm(100, mean = 0.8*Algae + 0.2*Nutr + -0.5*Density, sd = 0.5)
+
+df <- tibble(Area=Area, Nutr = Nutr, Algae=Algae, Density=Density, SVL = SVL)
+
+ggpairs(df)
+```
+What should you include in your regression?
+
+
+## Estimates effects depend on what is included... why?
+```{r}
+lm.a <- summary(lm(SVL ~ Area - 1)) 
+lm.f <- summary(lm(SVL ~ Algae - 1))
+lm.n <- summary(lm(SVL ~ Nutr - 1)) 
+lm.d <- summary(lm(SVL ~ Density - 1))
+
+lm.full <- summary(lm(SVL ~ Area + Nutr + Algae + Density - 1)) 
+```
+
+```{r, fig.width = 5, fig.height = 3, fig.cap="Estimated coefficients when estimated individually or in a full model. Vertical lines are 95 percent CIs."}
+P <- bind_rows(
+  as_tibble(rbind( coef(lm.a), coef(lm.f), coef(lm.n), coef(lm.d)), rownames="Variable") %>% mutate(Model = "Individual"),
+as_tibble(coef(lm.full), rownames="Variable") %>% mutate(Model = "Full")
+) %>% 
+  ggplot(., aes(Variable, y=Estimate, 
+                ymin=Estimate - 1.96*`Std. Error`, 
+                ymax=Estimate + 1.96*`Std. Error`,
+                color = Model, 
+                shape = Model)) + 
+  geom_hline(yintercept = 0) + 
+  geom_pointrange() +
+  scale_shape(solid = FALSE)
+P
+```
+
+
+## Statistics are association machines
+
+It is up to us to interpret what they are telling us. We have not (yet) done the hard work of figuring out how our statistics map on to how we think the system works.
+
+Enter the DAG
+
+## What is a DAG?
+
+A "DAG" is a **d**irected, **a**cyclic **g**raph. 
+
+- directed: arrows  describe causal influence
+- acyclic: no cycles or loops, no positive or negative feedbacks
+- graph: nodes (=variables) connected by arrows (=causal relationships)
+
+
+## Drawing a DAG
+
+-  Write out the important variables (both "predictors" and "responses")
+    - measured variables are unadorned: e.g., $X, Y, Z$
+    - unmeasured (or are unobserved) variables are circled: \textcircled{U} 
+-  Draw arrows defining (assumed) _causal_ relationships connecting variables (e.g., $X \rightarrow Y$ means "changes in X causes changes in Y")
+    -  We are not drawing the _order_ of things
+    -  We are not describing the _direction_ or _shape_ of  relationships
+    -  Arrows do not show interactions, either
+-  Keep it simple. 
+-  Can draw different versions representing different hypotheses
+
+
+## Three possible DAGs for our frog example
+
+```{r}
+library(dagitty)
+
+dag1 <- dagitty("dag{
+Area -> Algae -> SVL
+Area -> SVL
+Nutr -> Algae
+Density -> SVL
+Area [exposure]
+SVL [outcome]
+}")
+coordinates(dag1) <- list(x=c(Area=1, Algae=2, Density=1, Nutr = 1, SVL=3),
+                         y=c(Area=1, Algae=2, Density=3, Nutr = 2, SVL=2))
+dag2 <- dagitty("dag{
+Area -> Density -> SVL
+Area -> Algae -> Density
+Nutr -> Algae -> SVL
+Area [exposure]
+SVL [outcome]
+}")
+coordinates(dag2) <- list(x=c(Area=1, Algae=5, Density=5, Nutr = 1, SVL=10),
+                         y=c(Area=5, Algae=5, Density=9, Nutr = 1, SVL=5))
+
+dag3 <- dagitty("dag{
+Area -> Density -> SVL
+Area -> Algae -> Density
+Nutr -> Algae -> SVL
+Nutr -> Q -> SVL
+Area [exposure]
+SVL [outcome]
+Q [unobserved]
+}")
+coordinates(dag3) <- list(x=c(Area=1, Algae=5, Density=5, Nutr = 5, Q = 7.5, SVL=10),
+                         y=c(Area=5, Algae=5, Density=9, Nutr = 1, Q = 3, SVL=5))
+```
+```{r, fig.width=5, fig.height=3}
+par(mfrow=c(2,2))
+drawdag(dag1)
+drawdag(dag2)
+drawdag(dag3)
+```
+
+## Implied conditional independencies
+
+```{r, fig.width=2.5, fig.height=1.25}
+drawdag(dag1, cex=2/3)
+```
+
+Use `library(dagitty)` in R or  http://dagitty.net/dags.html
+```{r, echo=TRUE}
+impliedConditionalIndependencies(dagitty("dag{
+Algae <- Area -> SVL
+Nutr -> Algae -> SVL <- Density
+}"))
+```
+
+
+
+## What do we mean by independent? 
+
+Quick and dirty definition: parameter estimate is essentially zero
+```{r, echo=TRUE}
+coef(summary(lm(Density ~ Area)) )
+```
+
+Since $\text{Density} \not\!\perp\!\!\!\perp \text{Area}$, DAG1 seems wrong...
+
+## Remember...
+
+DAGs just tell us the (implied) consequences of the causal model we _assume_.
+ 
+We, as scientists, have to sort out what are reasonable models, interpret model outputs, etc. 
+
+## The four elemental relationships
+
+1. **Pipe**: $X \rightarrow Z \rightarrow Y$
+
+```{r, echo=TRUE}
+impliedConditionalIndependencies(dagitty("dag{X -> Z -> Y}"))
+```
+
+2. **Confound**: $X \leftarrow Z \rightarrow Y$
+
+```{r, echo=TRUE}
+impliedConditionalIndependencies(dagitty("dag{X <- Z -> Y}"))
+```
+
+Notice they have the same conditional independencies! _Causation_ flows one way,  _Information_ flows both ways.
+
+
+## The four elemental relationships
+
+3. **Collider**: $X \rightarrow Z \leftarrow Y$  (Opposite of confound.)
+```{r, echo=TRUE}
+impliedConditionalIndependencies(dagitty("dag{X -> Z <- Y}"))
+```
+
+4. **Descendant**: $\begin{array}{c} Y_\searrow\\  X ^\nearrow \end{array}  Z \rightarrow D$
+```{r, echo=TRUE} 
+impliedConditionalIndependencies(dagitty("dag{X->Z<-Y; Z->D}"))
+```
+
+## Back to our example: What happened? 
+
+Why was `Area` $\perp \!\!\! \perp$ `SVL` | `Algae`, `Density`, `Nutr` ?
+
+::: columns
+
+:::: column
+```{r, fig.width=2.5, fig.height=2}
+drawdag(dag3, cex=1/2)
+```
+::::
+
+:::: column
+```{r, fig.width=3.5, fig.height=2}
+P
+```
+::::
+
+:::
+
+- Had conditioned on intermediaries in pipes!
+
+## Back to our example: What do we want? 
+
+We were interested in effect of `Area` on `SVL`
+
+```{r, echo=TRUE}
+adjustmentSets(dag3, exposure = "Area", outcome = "SVL")
+```
+
+- All we need to do was regress `SVL` on `Area` and nothing else!
+
+
+::: columns
+
+:::: column
+```{r, fig.width=2.5, fig.height=2}
+drawdag(dag3, cex=1/2)
+```
+::::
+
+:::: column
+```{r, fig.width=3.5, fig.height=2}
+P
+```
+::::
+
+:::
+## Back to our example: What do we want? 
+
+If instead we were interested in influence of `Algae` on `SVL` (in 3rd DAG) 
+```{r, echo=TRUE}
+adjustmentSets(dag3, exposure = "Algae", outcome = "SVL")
+```
+
+```{r, fig.width=2.5, fig.height=2}
+drawdag(dag3, cex=1/2)
+```
+
+
+## Simpson's paradox
+
+```{r, fig.width = 4, fig.height = 3, fig.cap="A DAG in one version of Simpson's paradox"}
+simp <- dagitty("dag{
+Z1 -> U -> X -> Y <- Z3 <- Z1
+U -> Z2 <- Z3
+U [unobserved]
+X [exposure]
+Y [outcome]
+}")
+coordinates(simp) <- list(x=c(U=1, Z1=5, X=1, Y=9, Z2 = 5, Z3 = 9),
+                         y=c(U = 3, Z1=1, X=9, Y=9, Z2 = 5, Z3 = 3))
+drawdag(simp)
+```
+
+## Simpson's paradox
+
+::: columns
+
+:::: column
+```{r, fig.width=2.5, fig.height=2}
+drawdag(simp, cex=1/2)
+```
+::::
+
+:::: column
+
+```{r, fig.width = 4, fig.height = 3, }
+simpson.simulator <- function(N,s,ce){
+	Z1 <- rnorm(N,0,s)
+	Z3 <- rnorm(N,0,s) + Z1
+	U <- rnorm(N,0,s) + Z1
+	Z2 <- rnorm(N,0,s) + Z3 + U
+	X <- rnorm(N,0,s) + U
+	Y <- rnorm(N,0,s) + ce*X + 10*Z3
+	data.frame(Y,X,Z1,Z2,Z3)
+}
+
+# 1st parameter: sample size
+# 2nd parameter: noise standard deviation
+# 3rd parameter: true causal effect
+D <- simpson.simulator(500,0.01,1)
+
+
+estimate <- lower <- upper <- numeric()
+conditioned_on <- factor(c("Nothing", "Z1", "Z2", "Z1 & Z2", "Z1, Z2, Z3"), 
+                         levels = c("Nothing", "Z1", "Z2", "Z1 & Z2", "Z1, Z2, Z3"))
+
+# unadjusted estimate
+m <- lm(D[,1:2])
+estimate[1] <- coef(m)["X"]
+lower[1] <- confint(m,'X')[1]
+upper[1] <- confint(m,'X')[2]
+
+
+# adjusted for {Z1}
+m <- lm(D[,c(1,2,3)])
+estimate[2] <- coef(m)["X"]
+lower[2] <- confint(m,'X')[1]
+upper[2] <- confint(m,'X')[2]
+
+# adjusted for {Z2}
+m <- lm(D[,c(1,2,4)])
+estimate[3] <- coef(m)["X"]
+lower[3] <- confint(m,'X')[1]
+upper[3] <- confint(m,'X')[2]
+
+# adjusted for {Z1,Z2}
+m <- lm(D[,c(1,2,3,4)])
+estimate[4] <- coef(m)["X"]
+lower[4] <- confint(m,'X')[1]
+upper[4] <- confint(m,'X')[2]
+
+# adjusted for {Z1,Z2,Z3}
+m <- lm(D[,c(1,2,3,4,5)])
+estimate[5] <- coef(m)["X"]
+lower[5] <- confint(m,'X')[1]
+upper[5] <- confint(m,'X')[2]
+
+df_simp <- tibble(estimate, lower, upper, conditioned_on)
+
+ggplot(df_simp, aes(x=conditioned_on, y=estimate, ymin=lower, ymax=upper)) + 
+  geom_hline(yintercept = 0) +
+  geom_hline(yintercept = 1, linetype = 2) + 
+  geom_pointrange() + 
+  labs(x="Conditioned on")
+```
+
+::::
+
+:::
+
+
+Magnitude and _sign_ of estimated effect of $X$ on $Y$ depends on what else is in the model!
+
+- Throw in variables at your peril!
+
+
+## Some final thoughts
+
+- DAGs can help  make sense of statistical associations between variables
+  - help you focus on what is reasonable and what you _actually_ want to know
+  - _Sometimes_ can help you test causal models (implied conditional independencies)
+  - _Usually_ can help you find the meaning of parameter estimates (assuming model is right)
+- DAGs are useful in planning studies
+  - determine what variables you need
+  - useful for simulating data (and then analyzing)
+- **But** DAGs are always assumed; you must decide what is reasonable

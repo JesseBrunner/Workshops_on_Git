@@ -1,0 +1,193 @@
+---
+title: "Using Shiny for teaching"
+author: "Jesse Brunner"
+date: '`r format(Sys.Date(), "%Y/%m/%d")`'
+output: ioslides_presentation
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      message=FALSE,
+                      warning=FALSE)
+```
+
+
+## What is Shiny?	
+* interactive web applications (R-backend, Pretty front-end)
+    - If you can do it in R, you can put into an app
+    - _Plus_ pretty front-end & interactivity 
+    - Users don't need to worry about code
+* many modes of delivery
+    - Hosted online (free and pay options, or host your own) 
+    - On your own computer (i.e., locally)
+    - Embedded in Rmarkdown documents (e.g., slides)
+ 
+
+## What's it good for? 
+* Anything where **_interaction_** improves learning or understanding... 
+  * working with data, model, map, etc.
+* Research tools
+	* Here's a model, what if I tweak these parameters?
+	  - (https://brunnerlab.shinyapps.io/Tick_Matrix_Model/)
+	* Here's a bit of a data set, what if I slice it this way or that?
+	  - (https://brunnerlab.shinyapps.io/GRRS_Interactive/)
+* Conveying information, data, predictions, etc. to a wider audience
+	* Virtually every EEID grant I've read includes a Shiny module for outreach
+* **Teaching tools** <-- today's topic  
+
+## Teaching Use cases
+* **Illustrate a concept** or let students **play with an idea** 
+  - Pair with readings or lecture
+  - Use for more **interactive homework** 
+    - e.g., play with simulations/data, then answer questions
+* Use for **in-class exercises** (individually, in groups, as a class)
+	* make predictions and see consequences
+	* work with data (e.g., make plots, do calculations)
+* Use **in labs**
+	* **streamline analyses** / remove coding 
+	  - e.g., do stats or calculations for students to get to the point faster
+	* create **simulations** to see consequences, make decisions, answer questions
+	* **work with real-world data** without having to worry about coding
+* Create **learn-on-your-own interactive exercises**, especially for learning R. 
+
+
+## Teaching Use cases 
+* <div class="red">**Illustrate a concept** or let students **play with an idea**
+  - Pair with readings or lecture
+  - Use for more **interactive homework** 
+    - e.g., play with simulations/data, then answer questions </div>
+* Use for **in-class exercises** 
+* Use **in labs**
+* Create **learn-on-your-own interactive exercises**
+    
+    
+## Example: playing with exponential growth {.smaller}
+```{r, echo = FALSE, message=FALSE}
+shinyAppDir(
+  "~/Documents/Teaching/EcoHealthDis_370_F2021/EcoHealthDis_Interactive/ExponentialGrowth/",
+  options = list(width = "100%", height = 700)
+)
+```
+https://brunnerlab.shinyapps.io/ExponentialGrowth/
+
+
+## Example: playing with logistic growth {.smaller}
+```{r, echo = FALSE, message=FALSE}
+shinyAppDir(
+  "~/Documents/Teaching/EcoHealthDis_370_F2021/EcoHealthDis_Interactive/LogisticGrowth/",
+  options = list(width = "100%", height = 700)
+)
+```
+https://brunnerlab.shinyapps.io/LogisticGrowth/
+
+
+## Example: playing with compartment models {.smaller}
+```{r, echo = FALSE, message=FALSE}
+shinyAppDir(
+  "~/Documents/Teaching/EcoHealthDis_370_F2021/EcoHealthDis_Interactive/SEIR/",
+  options = list(width = "100%", height = 700)
+)
+```
+https://brunnerlab.shinyapps.io/SIRmodels/
+
+## Teaching Use cases
+* **Illustrate a concept** or let students **play with an idea** 
+* <div class="red">Use for **in-class exercises** (individually, in groups, as a class)
+	* make predictions and see consequences
+	* work with data (e.g., make plots, do calculations)</div>
+* Use **in labs**
+* Create **learn-on-your-own interactive exercises**, especially for learning R. 
+
+## Example: ranking odds of death in-class {.smaller}
+```{r, echo = FALSE, message=FALSE}
+shinyAppDir(
+  "~/Documents/Teaching/EcoHealthDis_370_F2021/EcoHealthDis_Interactive/Odds/",
+  options = list(width = "100%", height = 700)
+)
+```
+https://brunnerlab.shinyapps.io/Odds/
+
+## Teaching Use cases 
+* **Illustrate a concept** or let students **play with an idea** 
+* Use for **in-class exercises** (individually, in groups, as a class)
+* <div class="red">Use **in labs**
+	* **streamline analyses** / remove coding 
+	  - e.g., do stats or calculations for students to get to the point faster 
+	* create **simulations** to see consequences, make decisions, answer questions
+	* **work with real-world data** without having to worry about coding </div>
+* Create **learn-on-your-own interactive exercises**, especially for learning R. 
+
+## Example: occupancy lab calculations 
+```{r, echo = FALSE, message=FALSE}
+shinyAppDir(
+  "~/Documents/Teaching/Shiny_Models_Teaching/Occupancy/",
+  options = list(width = "100%", height = 700)
+)
+```
+https://brunnerlab.shinyapps.io/Occupancy/
+
+## I'm sold...how do I make my own? 
+<div class='left' style='float:left;width:30%'>
+![](MasteringShiny.png){width=60%}</div>
+<div class='right' style='float:right;width:65%'>
+* Comprehensive online book (https://mastering-shiny.org/)
+* Online tutorials (https://shiny.rstudio.com/tutorial/)
+* Seminars/talks (e.g., https://ecoforecast.org/workshops/r-shiny-seminar-series/)
+* Adapt existing apps <-- _How I got started_
+* lean on your R-savvy students & colleagues</div>
+
+
+
+
+
+
+## I'm sold...but I don't code
+
+Find existing apps
+
+* Collections of apps available
+  - e.g., ecology & evolution apps made by UCLA EEB grads (https://ecoevoapps.gitlab.io/)
+  - introductory statistical ideas (e.g., https://facweb.gvsu.edu/adriand1/happy_apps.html one of _many_)
+* Creative googling & Twitter are your friends
+* Consider contacting the creators...
+  - In my experience, they often make changes I've asked for!
+
+
+## Extended examples / inspirations
+* Statistical
+  - Dice & Chi-square (https://mathisawesome.shinyapps.io/dice/)
+  - Asymptotics & the behavior of large sample sizes (https://ukacz.shinyapps.io/asymptotics/)
+  - Linear regression diagnostics (https://gallery.shinyapps.io/slr_diag/)
+  - _Interactive_ lab exercise on categorical variables (https://kbodwin.shinyapps.io/Lab_Exercise_CatVars2/)
+  
+* Graphing
+  - Why bar plots are often nonsense (https://stekhoven.shinyapps.io/barplotNonsense/)
+  - Interactive graphing in `ggplot` (https://fgeocomm.shinyapps.io/basics-vis/)
+
+## Extended examples / inspirations
+
+* Dynamic models
+  - Changes in Allele frequency (https://cjbattey.shinyapps.io/adaptR/)
+  - Coalescence models (https://pyhatanja.shinyapps.io/CoalescenceContinuous/)
+  - Within-host models (a whole class in one! https://shiny.ovpr.uga.edu/DSAIRM/)
+  - Several of my own (https://github.com/JesseBrunner/EcoHealthDis_Interactive/wiki)
+  
+* Simulating data: 
+  - Simulate Cutthroat Trout populations in real streams (https://trout.shinyapps.io/lahontan/)
+
+## Extended examples / inspirations
+
+* Using existing data: 
+  - What will climate feel like in 60 years? (https://fitzlab.shinyapps.io/cityapp/)
+  - Use CDC data for understanding trends  (https://michaud.shinyapps.io/CDCPlot/)
+  - Compare COVID-19 with prior epidemics  (https://vac-lshtm.shinyapps.io/ncov_tracker/)
+  - Time series of marine fish abundance/biomass  (https://james-thorson.shinyapps.io/FishViz/)
+  - Quiz for IDing UK plant species  (https://gift.uni-goettingen.de/shiny/BotanizeR/)
+
+## Extended examples / inspirations
+* Physiological 
+  - Estimate your Blood Alcohol Concentration (BAC)  (https://rasmusab.shinyapps.io/drinkr/  or https://irjerad.shinyapps.io/final/)
+  - Visualizing plant phenotypic space  (https://shiny.cefe.cnrs.fr/PhenoSpace/)
+  - Rat physiology simulation (impressive!   http://physiol-seafile.uzh.ch:3939/entry_level/)
+

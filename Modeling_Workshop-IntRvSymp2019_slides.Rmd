@@ -1,0 +1,424 @@
+---
+title: "Workshop: Modeling disease spread"
+subtitle: "A very brief introduction to the how and why of epidemiological modeling"
+author: "Jesse Brunner"
+date: '`r Sys.Date()`'
+output:
+  ioslides_presentation:
+    fig_height: 3
+    fig_width: 5
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Why model?
+Models, broadly defined, are useful in several ways:
+
+* **formalizing thinking about how a system works** 
+    - boxes and arrows
+    - simple mathematical representation
+    - finer, more complex representation of processes and variables
+*  **identifying data gaps** (as one tries to parameterize)
+
+## Why model?
+*  **understand consequences of model structure / assumptions** (_run the model_)
+	  - examining counterfactuals  
+    - identify influential parameters or processes (sensitivity analyses, comparing models with different structures formally)
+    - sort among models / underlying hypotheses (which models best match reality / fit data?)
+    - make quantitative predictions/projections/statements about likely dynamics/outcomes/etc. (running the model, but with more quantitative care/flare)
+
+## Our goals today
+
+1. Describe simple "compartment" model as boxes & arrows and differential equations
+2. Implement the model in R with the `simecol` package
+
+## Part 1: Model structure
+
+We are interested in describing the dynamics and outcome of an epidemic in a closed population.
+
+We will thus focus on:
+
+* the fractions of the hosts population that are in the susceptible class ($S$) or the infected class ($I$)
+  * These are the "state variables" 
+* track the flow of these fractions of the population between classes
+
+## Part 1: Model structure | assumptions
+
+We will ignore:
+
+*  immunity  for simplicity and because it does not seem to happen in tadpoles, which is mostly what I think about. 
+*  dynamics other than infection, recovery to susceptibility, and death due to infection. That is, no immigration, emigration, birth, or death not due to disease.
+
+We will assume
+
+* individuals within a class ($S$ or $I$) are identical.
+* transmission occurs by direct contact
+
+## Part 1: Model structure | the forces at work
+
+Susceptible individuals are 
+
+  * **infected** by contact with infected individuals
+  
+Infected animals either
+
+  * **die**  or
+  * **recover** to $S$ class 
+
+```{r boxarrows, echo=FALSE, message=FALSE}
+# , out.width = "500px", out.height="300px"
+library(diagram)
+
+openplotmat()
+pos <- coordinates(c(7))
+straightarrow(c(0.17, 0.75), c(0.4, 0.75), arr.pos = 1)
+curvedarrow(c(0.45, 0.75), c(0.16, 0.75), arr.pos = 0.9, curve=0.6, endhead = TRUE)
+straightarrow(c(0.6, 0.75), c(0.8, 0.75), arr.pos = 1)
+
+textrect(c(0.07, 0.75), lab ="S", radx = 0.07, rady = 0.2, cex = 4)
+textrect(c(0.5, 0.75), lab ="I", radx = 0.07, rady = 0.2, cex = 4)
+textplain(mid=c(0.91, 0.75), lab ="Dead",  cex = 2)
+```
+
+## Part 1: Model structure | thinking about rates
+
+Susceptible individuals are 
+
+  * **infected**  at per capita rate $\beta I$
+  
+Infected animals either
+
+  * **die** at per capita rate $\alpha$, or
+  * **recover** to $S$ class at per capita rate $\gamma$
+
+```{r boxarrows_rates, echo=FALSE, message=FALSE}
+library(diagram)
+
+openplotmat()
+pos <- coordinates(c(7))
+straightarrow(c(0.17, 0.75), c(0.4, 0.75), arr.pos = 1)
+curvedarrow(c(0.45, 0.75), c(0.16, 0.75), arr.pos = 0.9, curve=0.6, endhead = TRUE)
+straightarrow(c(0.6, 0.75), c(0.8, 0.75), arr.pos = 1)
+
+textrect(c(0.07, 0.75), lab ="S", radx = 0.07, rady = 0.2, cex = 4)
+textrect(c(0.5, 0.75), lab ="I", radx = 0.07, rady = 0.2, cex = 4)
+textplain(mid=c(0.91, 0.75), lab ="Dead",  cex = 2)
+
+textplain(mid=c(1.5/5, 0.60), lab = expression(beta), cex=3)
+textplain(mid=c(1.7/5, 0.85), lab = expression(gamma), cex=3)
+textplain(mid=c(3.5/5, 0.6), lab = expression(alpha), cex=3)
+
+```
+
+
+## Part 1: Model structure | writing ODEs
+
+We can write ordinary differential equations (ODEs) to describe the _rate_ at which we gain/lose $S$ and $I$. 
+
+$$
+\begin{align}
+\frac{dS}{dt} &= -\beta S I + \gamma I \\
+\frac{dI}{dt} &= \beta S I - \gamma I - \alpha I
+\end{align}
+$$
+
+NB: If we add up the two equations all terms cancels out except $-\alpha I$. 
+
+$\rightarrow$ population will decline as hosts are lost to disease-induced mortality (=virulence)
+
+## Part 1: Model structure | the allure of simple ODEs
+
+The good:
+
+* ODEs are fairly simple to write out (or convert from boxes and arrows)
+* very powerful
+* (relatively) easy to adapt to 
+
+The bad: 
+
+* you can easily make a model that you have no hope of understanding or parameterizing
+
+## Part 1: Model structure | the allure of simple ODEs
+
+>   A model does nothing but expose the consequences
+>   of the assumptions upon which it is based. 
+>			– Schauber & Ostfeld RS (2002) Ecol Appl 12:1142-1162
+
+
+## Part 2: Implementing our model in R | `simecol`
+
+`simecol` to: 
+
+1. organize our model and  stuff (e.g., parameters, initial conditions)  
+2. solve (=run) the model 
+
+`tidyverse` to deal with the data output from model runs.
+
+## Part 2: Implementing our model in R | `simecol`
+
+```{r}
+library(simecol) # for running model 
+library(tidyverse) # for data wrangling & plotting
+```
+
+
+## Part 2: Implementing our model in R | building up the model
+
+The basic structure of a `simecol` model of ODEs is:
+
+```{r build1, eval=FALSE}
+SI <- odeModel( 
+          main = function (time, init, parms, ...) { 
+            ### The actual model will go here
+          }, 
+          parms = c(), #named vector of parameters
+          times = c(), # time points over which to solve the model 
+          init = c(), # initial values for the variables 
+          solver = "rk4" # the function that does the solving
+) 
+```
+
+
+## Part 2: Implementing our model in R 
+
+```{r build2, eval=FALSE}
+SI <- odeModel( 
+          main = function (time, init, parms, ...) { 
+            S <- init["S"]
+            I <- init["I"]
+            with(as.list(parms),  {
+              ### The actual model will go here
+            })
+          }, 
+          parms = c(), #named vector of parameters
+          times = c(), # time points over which to solve the model 
+          init = c(), # initial values for the variables 
+          solver = "rk4" # the function that does the solving
+) 
+```
+
+
+## Part 2: Implementing our model in R 
+
+```{r build3, eval=FALSE}
+SI <- odeModel( 
+          main = function (time, init, parms, ...) { 
+            S <- init["S"]
+            I <- init["I"]
+            with(as.list(parms),  {
+              dS <- -beta*S*I + gamma*I        		          
+              dI <-  beta*S*I - gamma*I - alpha*I   
+              list(c(dS, dI)) 
+            })
+          }, 
+          parms = c(), #named vector of parameters
+          times = c(), # time points over which to solve the model 
+          init = c(), # initial values for the variables 
+          solver = "rk4" # the function that does the solving
+) 
+```
+
+
+## Part 2: Implementing our model in R 
+
+```{r simpleSI}
+SI <- odeModel( 
+          main = function (time, init, parms, ...) { 
+            S <- init["S"]
+            I <- init["I"]
+            with(as.list(parms),  {
+              dS <- -beta*S*I + gamma*I        		          
+              dI <-  beta*S*I - gamma*I - alpha*I   
+              list(c(dS, dI)) 
+            })
+          }, 
+          parms = c(beta=0.0005, gamma=0.02, alpha=0.05), 
+          times = c(from=1, to=90, by=1), 
+          init = c(S=500, I=1), 
+          solver = "rk4" # the function that does the solving
+) 
+```
+
+## Part 2: Implementing our model in R | running the model
+
+
+```{r run_simpleSI}
+SI <- sim(SI) # simulate or "run" the model
+out(SI)  # accessor function
+```
+
+
+## Part 2: Implementing our model in R | running the model
+
+```{r plot_SimpleSI}
+out(SI) %>% # get the output from the model
+  gather(key="Box", value="Number", S, I) %>% # turn it from wide to long
+  ggplot(., aes(x=time, y=Number, color=Box)) + # construct the plot
+  geom_line() # use a line to show the data
+```
+
+
+## Tweaking things | futzing with parameters
+
+```{r tweak_beta}
+parms(SI)
+parms(SI)["beta"] <- 0.001 # twice as high
+parms(SI)
+```
+## Tweaking things | futzing with parameters
+```{r plot_tweak_beta}
+out(sim(SI)) %>% 
+  gather(key="Box", value="Number", S, I) %>% 
+  ggplot(., aes(x=time, y=Number, color=Box)) +
+  geom_line()
+```
+
+
+## Tweaking things | futzing with initial variables & time series
+
+```{r plot_tweak_I}
+init(SI)["I"] <- 10
+times(SI)["to"] <- 150
+out(sim(SI)) %>% 
+  gather(key="Box", value="Number", S, I) %>% 
+  ggplot(., aes(x=time, y=Number, color=Box)) +
+  geom_line()
+```
+
+
+## Tweaking things | creating composite variables
+
+```{r}
+out(sim(SI)) %>% 
+  mutate(N = S+I) %>% # create a new variable for N
+  gather(key="Box", value="Number", S, I, N) %>% # plot it along with S & I
+  ggplot(., aes(x=time, y=Number, color=Box)) +
+  geom_line()
+```
+
+## Tweaking things | creating composite variables
+
+```{r}
+out(sim(SI)) %>% 
+  mutate(N = S+I, # create a new variable for N
+         Prevalence = I/N) %>% # then use it to calculate prevalence
+  ggplot(., aes(x=time, y=Prevalence)) + # which will be plotted
+  geom_line()
+```
+
+## Next steps and advice | Transmission terms
+
+```{r trans_terms, echo=FALSE, warning=FALSE}
+ggplot(data.frame(I=0:200), aes(x=I)) + 
+  stat_function(fun=function(x) 0.2*x, aes(color = "Density")) + 
+  stat_function(fun=function(x) 10, aes(color = "Frequency")) + 
+  stat_function(fun=function(x) 1.8*x^0.33, aes(color = "Power")) + 
+  scale_color_discrete("Term") + 
+  scale_y_continuous("Rate of infectious contacts", lim=c(0,20))
+```
+
+essential, but difficult to pin down emprically
+
+## Next steps and advice |  density or numbers?
+
+*  Does the habitat/area stay the same or shrink?
+*  Does the population maintain a density (e.g., heard/aggregation)?
+*  What do you have data on?
+
+
+## Next steps and advice | check your units (aka dimensional analysis)
+
+* Units on left (e.g., Number/time) must equal units on right 
+* So make sure units on variables and parameters cancel correctly
+
+```{r, out.width = "300px", echo=FALSE}
+knitr::include_graphics("dimensional_analysis.png")
+```
+
+
+
+## Next steps and advice | distributions of waiting times
+
+* Constant rates $\rightarrow$ exponential distribution of time in category
+
+$I_0 = 100$, $\alpha = 0.05$, and $S_0=0$. 
+
+```{r, echo=FALSE}
+rates1 <- odeModel(
+  main = function (time, init, parms, ...) { 
+            # unpack variables
+            S <- init["S"]
+            I <- init["I"]
+            
+            with(as.list(parms),  {
+              
+              #transmission     #virulence 
+              dS <- -beta*S*I         		          
+              dI <-  beta*S*I - alpha*I   
+              
+              list(c(dS, dI)) 
+            })
+          }, 
+  parms = c(beta= 0.0005, alpha= 0.05), 
+  times = c(from=1, to=90, by=1), 
+  init = c(S=0, I=100),  
+  solver = "rk4" 
+)
+
+out(sim(rates1)) %>% 
+  gather(key="Box", value="Number", S, I) %>% 
+  ggplot(., aes(x=time, y=Number, color=Box)) +
+  geom_line() + 
+  geom_vline(xintercept = 1/0.05)
+```
+
+## Next steps and advice | distributions of waiting times
+
+* add intermediate class
+  * $E$xposed-but-not-yet-infectious class ($SEI$ model)
+* break up $I$ into $n$ compartments, each flowing into the next
+  * $I_1 \rightarrow I_2, I_2 \rightarrow I_3, \dots, I_{n-1} \rightarrow I_n, I_n \rightarrow \text{death}$
+
+
+```{r, echo=FALSE}
+rates2 <- odeModel(
+  main = function (time, init, parms, ...) { 
+            # unpack variables
+            S <- init["S"]
+            I1 <- init["I1"]
+            I2 <- init["I2"]
+            I3 <- init["I3"]
+            I4 <- init["I4"]
+            I5 <- init["I5"]
+            
+            with(as.list(parms),  {
+              #transmission          #virulence 
+              dS  <- -beta*S*(I1+I2+I3+I4+I5)         		          
+              dI1 <-  beta*S*(I1+I2+I3+I4+I5) - alpha*I1
+              dI2 <-  alpha*I1     - alpha*I2
+              dI3 <-  alpha*I2     - alpha*I3
+              dI4 <-  alpha*I3     - alpha*I4
+              dI5 <-  alpha*I4     - alpha*I5
+              
+              list(c(dS, dI1, dI2, dI3, dI4, dI5)) 
+            })
+          }, 
+  parms = c(beta= 0.0005, alpha= 0.05*5), # Notice we multiply alpha by 5
+  times = c(from=1, to=90, by=1), 
+  init = c(S=0, I1=100, I2=0, I3=0, I4=0, I5=0),  
+  solver = "rk4" 
+)
+
+out(sim(rates2)) %>% 
+  # make new variable with the sume of all of the Ix columns
+  mutate(I=rowSums(select(., contains("I", ignore.case = FALSE)))) %>% 
+  gather(key="Box", value="Number", -time) %>% 
+  ggplot(., aes(x=time, y=Number, color=Box)) +
+  geom_line() + 
+  geom_vline(xintercept = 1/0.05)
+```
+
+
